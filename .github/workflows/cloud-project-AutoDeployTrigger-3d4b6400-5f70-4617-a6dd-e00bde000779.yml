@@ -1,0 +1,48 @@
+name: Trigger auto deployment for cloud-project
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/cloud-project:${{ github.sha }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.CLOUDPROJECT_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.CLOUDPROJECT_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.CLOUDPROJECT_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          containerAppName: cloud-project
+          resourceGroup: CloudProject
+          imageToDeploy: ghcr.io/${{ github.repository_owner }}/cloud-project:${{ github.sha }}
+          targetPort: 7860

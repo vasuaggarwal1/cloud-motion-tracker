@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Weather Summary · Cloud Motion Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; min-height: 100%;
+      background: #030810; color: #c8e4f8;
+      font-family: 'Exo 2', sans-serif;
+    }
+
+    /* ── Topbar ── */
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 48px; z-index: 500;
+      background: rgba(3,8,16,0.97); backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(0,212,255,0.12);
+      display: flex; align-items: center; padding: 0 1rem; gap: 0.8rem;
+    }
+    .home-btn {
+      text-decoration: none; color: #3a6080; font-family: 'Space Mono', monospace;
+      font-size: 0.68rem; padding: 4px 10px;
+      border: 1px solid rgba(0,212,255,0.12); border-radius: 6px;
+      transition: color .2s, border-color .2s;
+    }
+    .home-btn:hover { color: #00d4ff; border-color: rgba(0,212,255,0.35); }
+    .tb-title { font-family: 'Orbitron', sans-serif; font-size: 0.78rem; font-weight: 700; color: #fff; }
+    .tb-badge {
+      font-family: 'Space Mono', monospace; font-size: 0.6rem;
+      color: #00ff88; background: rgba(0,255,136,0.08);
+      border: 1px solid rgba(0,255,136,0.22); border-radius: 100px; padding: 2px 10px;
+    }
+    .tb-right {
+      margin-left: auto; display: flex; align-items: center; gap: 8px;
+      font-family: 'Space Mono', monospace; font-size: 0.52rem; color: #2a4060;
+    }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #3a6080; flex-shrink: 0; }
+    .status-dot.online { background: #00ff88; box-shadow: 0 0 6px rgba(0,255,136,0.6); }
+    @keyframes pulse { 0%,100% { opacity:1; box-shadow: 0 0 4px #00ff88; } 50% { opacity:0.4; box-shadow:none; } }
+    .status-dot.online { animation: pulse 2s ease-in-out infinite; }
+
+    /* ── Page body ── */
+    #page {
+      margin-top: 48px;
+      min-height: calc(100vh - 48px);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 2.5rem 1rem 3rem;
+    }
+
+    /* ── Hero header ── */
+    .hero {
+      text-align: center; margin-bottom: 2rem;
+      animation: fadeUp 0.4s ease forwards;
+    }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    .hero-icon { font-size: 2rem; margin-bottom: 0.6rem; }
+    .hero-title {
+      font-family: 'Orbitron', sans-serif; font-size: 1.1rem; font-weight: 900;
+      color: #fff; letter-spacing: 0.1em; margin-bottom: 0.4rem;
+    }
+    .hero-sub {
+      font-family: 'Space Mono', monospace; font-size: 0.58rem;
+      color: #2a5070; letter-spacing: 0.12em;
+    }
+
+    /* ── Main card ── */
+    .card {
+      width: 100%; max-width: 760px;
+      background: rgba(0,212,255,0.03);
+      border: 1px solid rgba(0,212,255,0.14);
+      border-radius: 14px; overflow: hidden;
+      animation: fadeUp 0.5s ease 0.1s forwards; opacity: 0;
+    }
+
+    /* card header */
+    .card-head {
+      padding: 14px 20px;
+      background: rgba(0,10,22,0.8);
+      border-bottom: 1px solid rgba(0,212,255,0.1);
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .card-head-left { display: flex; flex-direction: column; gap: 3px; }
+    .card-lbl {
+      font-family: 'Space Mono', monospace; font-size: 0.5rem;
+      letter-spacing: 0.15em; color: #3a6080;
+    }
+    #meta-slot {
+      font-family: 'Space Mono', monospace; font-size: 0.68rem; color: #00d4ff;
+    }
+    .refresh-btn {
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Space Mono', monospace; font-size: 0.56rem; letter-spacing: 0.08em;
+      color: #00ff88; background: rgba(0,255,136,0.07);
+      border: 1px solid rgba(0,255,136,0.25); border-radius: 8px;
+      padding: 6px 14px; cursor: pointer;
+      transition: background .2s, box-shadow .2s;
+      white-space: nowrap;
+    }
+    .refresh-btn:hover { background: rgba(0,255,136,0.16); box-shadow: 0 0 12px rgba(0,255,136,0.2); }
+    .refresh-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .spin { display: inline-block; }
+    .spin.spinning { animation: spinIcon 1s linear infinite; }
+    @keyframes spinIcon { to { transform: rotate(360deg); } }
+
+    /* summary text body */
+    .card-body { padding: 24px 24px 20px; }
+    #summary-text {
+      font-family: 'Space Mono', monospace; font-size: 0.72rem;
+      line-height: 1.85; color: #c8e4f8;
+      min-height: 80px;
+    }
+    #summary-text.loading { color: #3a6080; font-style: italic; }
+    #summary-text.error   { color: #ff8080; }
+
+    /* card footer */
+    .card-foot {
+      padding: 12px 20px;
+      border-top: 1px solid rgba(0,212,255,0.07);
+      background: rgba(0,5,14,0.6);
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    }
+    .foot-item {
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Space Mono', monospace; font-size: 0.48rem; color: #2a4060;
+    }
+    .foot-item span { color: #3a7090; }
+    .foot-badge {
+      font-family: 'Space Mono', monospace; font-size: 0.48rem; letter-spacing: 0.08em;
+      color: #00ff88; background: rgba(0,255,136,0.07);
+      border: 1px solid rgba(0,255,136,0.18); border-radius: 4px; padding: 2px 8px;
+    }
+
+    /* ── Info strip below card ── */
+    .info-strip {
+      width: 100%; max-width: 760px; margin-top: 1rem;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      animation: fadeUp 0.5s ease 0.2s forwards; opacity: 0;
+    }
+    .info-tile {
+      background: rgba(0,212,255,0.02);
+      border: 1px solid rgba(0,212,255,0.09);
+      border-radius: 10px; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    .info-tile-lbl {
+      font-family: 'Space Mono', monospace; font-size: 0.44rem;
+      letter-spacing: 0.12em; color: #2a4060;
+    }
+    .info-tile-val {
+      font-family: 'Space Mono', monospace; font-size: 0.64rem; color: #00d4ff;
+    }
+    .info-tile-val.green { color: #00ff88; }
+
+    /* ── Back button ── */
+    .back-row {
+      margin-top: 1.6rem;
+      animation: fadeUp 0.5s ease 0.3s forwards; opacity: 0;
+    }
+    .back-btn {
+      text-decoration: none;
+      font-family: 'Space Mono', monospace; font-size: 0.58rem; letter-spacing: 0.1em;
+      color: #3a6080; background: transparent;
+      border: 1px solid rgba(0,212,255,0.1); border-radius: 8px;
+      padding: 8px 20px; cursor: pointer;
+      transition: color .2s, border-color .2s, background .2s;
+      display: inline-block;
+    }
+    .back-btn:hover { color: #00d4ff; border-color: rgba(0,212,255,0.35); background: rgba(0,212,255,0.05); }
+
+    /* ── Scanline overlay ── */
+    body::after {
+      content: ''; pointer-events: none;
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <a href="realtime.html" class="home-btn">← BACK</a>
+    <div class="tb-title">CLOUD MOTION TRACKER</div>
+    <div class="tb-badge">AI SUMMARY</div>
+    <div class="tb-right">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-txt">Loading…</span>
+    </div>
+  </header>
+
+  <!-- PAGE -->
+  <div id="page">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-icon">🛰️</div>
+      <div class="hero-title">AI WEATHER NARRATIVE</div>
+      <div class="hero-sub">INSAT-3DR · CREVNET · GROQ LLM · INDIA SUBCONTINENT</div>
+    </div>
+
+    <!-- Main summary card -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-head-left">
+          <div class="card-lbl">LATEST SATELLITE SLOT</div>
+          <div id="meta-slot">—</div>
+        </div>
+        <button class="refresh-btn" id="refresh-btn" onclick="loadSummary()">
+          <span class="spin" id="spin-icon">↻</span> REGENERATE
+        </button>
+      </div>
+
+      <div class="card-body">
+        <div id="summary-text" class="loading">Fetching AI weather summary…</div>
+      </div>
+
+      <div class="card-foot">
+        <div class="foot-item">MODEL <span id="foot-model">—</span></div>
+        <div class="foot-item">GENERATED <span id="foot-time">—</span></div>
+        <div class="foot-badge" id="foot-badge">⬡ GROQ LLM</div>
+      </div>
+    </div>
+
+    <!-- Info tiles -->
+    <div class="info-strip">
+      <div class="info-tile">
+        <div class="info-tile-lbl">DATA SOURCE</div>
+        <div class="info-tile-val">INSAT-3DR</div>
+      </div>
+      <div class="info-tile">
+        <div class="info-tile-lbl">PREDICTION MODEL</div>
+        <div class="info-tile-val">CREvNet</div>
+      </div>
+      <div class="info-tile">
+        <div class="info-tile-lbl">COVERAGE</div>
+        <div class="info-tile-val green">INDIA</div>
+      </div>
+    </div>
+
+    <!-- Back -->
+    <div class="back-row">
+      <a href="realtime.html" class="back-btn">← BACK TO REAL-TIME VIEW</a>
+    </div>
+
+  </div><!-- /#page -->
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    function fmtDate(iso) {
+      if (!iso) return '—';
+      try {
+        const d = new Date(iso), p = n => String(n).padStart(2,'0');
+        const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+        return p(d.getUTCDate())+' '+mo+' '+d.getUTCFullYear()+'  '+p(d.getUTCHours())+':'+p(d.getUTCMinutes())+' UTC';
+      } catch(e) { return iso; }
+    }
+
+    async function loadSummary() {
+      const txt    = $('summary-text');
+      const btn    = $('refresh-btn');
+      const spin   = $('spin-icon');
+      const dot    = $('status-dot');
+      const stxt   = $('status-txt');
+
+      txt.className = 'loading';
+      txt.textContent = 'Generating AI weather summary…';
+      btn.disabled = true;
+      spin.classList.add('spinning');
+      dot.className = 'status-dot';
+      stxt.textContent = 'Fetching…';
+
+      try {
+        const res  = await fetch('/api/summary');
+        const data = await res.json();
+
+        if (data.error) {
+          txt.className = 'error';
+          txt.textContent = '⚠ ' + data.error;
+          dot.className = 'status-dot';
+          stxt.textContent = 'Error';
+          return;
+        }
+
+        txt.className = '';
+        txt.textContent = data.summary;
+
+        $('meta-slot').textContent  = fmtDate(data.latestSlot);
+        $('foot-model').textContent = data.model || 'LLM';
+        $('foot-time').textContent  = fmtDate(data.generatedAt);
+
+        dot.classList.add('online');
+        stxt.textContent = 'Ready';
+
+      } catch(e) {
+        txt.className = 'error';
+        txt.textContent = '⚠ Could not reach the server. Make sure the backend is running.';
+        dot.className = 'status-dot';
+        stxt.textContent = 'Offline';
+      } finally {
+        btn.disabled = false;
+        spin.classList.remove('spinning');
+      }
+    }
+
+    // Load on page open
+    loadSummary();
+  </script>
+</body>
+</html>

@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manual Browse · Cloud Motion Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#030810;--surface:rgba(4,10,22,0.96);
+      --cyan:#00d4ff;--orange:#ff9f43;--text:#c8e4f8;--dim:#3a6080;
+      --glow:0 0 14px rgba(0,212,255,0.35);
+      --topbar:48px;--sidebar:300px;
+    }
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;overflow:hidden}
+
+    /* TOP BAR */
+    #topbar{
+      position:fixed;top:0;left:0;right:0;z-index:1000;height:var(--topbar);
+      background:rgba(3,8,16,0.95);backdrop-filter:blur(20px);
+      border-bottom:1px solid rgba(0,212,255,0.12);
+      display:flex;align-items:center;padding:0 1.2rem;gap:0.8rem;
+    }
+    .home-btn{
+      text-decoration:none;color:var(--dim);
+      font-family:'Space Mono',monospace;font-size:0.68rem;letter-spacing:0.08em;
+      padding:4px 10px;border:1px solid rgba(0,212,255,0.12);border-radius:6px;
+      transition:color .2s,border-color .2s;
+    }
+    .home-btn:hover{color:var(--cyan);border-color:rgba(0,212,255,.35)}
+    .topbar-title{font-family:'Orbitron',sans-serif;font-size:0.78rem;font-weight:700;color:#fff;letter-spacing:0.06em}
+    .mode-badge{
+      font-family:'Space Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;
+      color:var(--orange);background:rgba(255,159,67,0.08);
+      border:1px solid rgba(255,159,67,0.22);border-radius:100px;padding:2px 10px;
+    }
+
+    /* MAP */
+    #map{position:fixed;top:var(--topbar);left:0;right:var(--sidebar);bottom:0;z-index:1}
+    .leaflet-container{background:#07111e!important}
+    .leaflet-control-attribution{display:none!important}
+    .leaflet-control-zoom a{
+      background:var(--surface)!important;color:var(--cyan)!important;
+      border-color:rgba(0,212,255,0.18)!important;
+    }
+
+    /* Map loading overlay */
+    #map-loading{
+      position:fixed;top:var(--topbar);left:0;right:var(--sidebar);bottom:0;
+      z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;
+      background:rgba(3,8,16,0.65);backdrop-filter:blur(4px);
+      pointer-events:none;opacity:0;transition:opacity .3s;
+    }
+    #map-loading.visible{opacity:1}
+    .big-spinner{
+      width:50px;height:50px;border:3px solid rgba(0,212,255,0.1);
+      border-top-color:var(--cyan);border-radius:50%;animation:spin .85s linear infinite;
+    }
+    .loading-txt{font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--cyan);letter-spacing:0.08em}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* LEGEND */
+    #legend{
+      position:fixed;bottom:14px;left:14px;z-index:800;
+      background:var(--surface);backdrop-filter:blur(12px);
+      border:1px solid rgba(0,212,255,0.12);border-radius:10px;padding:10px 14px;
+    }
+    .legend-title{font-family:'Space Mono',monospace;font-size:0.54rem;letter-spacing:0.12em;color:var(--dim);margin-bottom:8px}
+    .legend-item{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+    .legend-swatch{width:24px;height:12px;border-radius:3px}
+    .sw-cloud{background:rgba(210,235,255,0.65);border:1px solid rgba(180,220,255,0.4)}
+    .sw-clear{background:transparent;border:1px dashed rgba(0,212,255,0.2)}
+    .legend-text{font-size:0.65rem;color:var(--text)}
+
+    /* SIDEBAR */
+    #sidebar{
+      position:fixed;top:var(--topbar);right:0;width:var(--sidebar);bottom:0;z-index:900;
+      background:var(--surface);backdrop-filter:blur(22px);
+      border-left:1px solid rgba(0,212,255,0.12);
+      display:flex;flex-direction:column;overflow-y:auto;
+    }
+
+    /* Section */
+    .s-block{padding:1.3rem 1.3rem 0}
+    .s-title{
+      font-family:'Space Mono',monospace;font-size:0.58rem;letter-spacing:0.16em;color:var(--dim);
+      display:flex;align-items:center;gap:8px;margin-bottom:1rem;
+    }
+    .s-title::after{content:'';flex:1;height:1px;background:rgba(0,212,255,0.1)}
+
+    /* Date/time fields */
+    .field{margin-bottom:1rem}
+    .field label{display:block;font-family:'Space Mono',monospace;font-size:0.58rem;letter-spacing:0.1em;color:var(--dim);margin-bottom:6px}
+    .field input{
+      width:100%;background:rgba(0,212,255,0.04);
+      border:1px solid rgba(0,212,255,0.18);border-radius:8px;
+      color:var(--text);font-family:'Space Mono',monospace;font-size:0.78rem;
+      padding:9px 12px;outline:none;color-scheme:dark;
+      transition:border-color .2s,box-shadow .2s;
+    }
+    .field input:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(0,212,255,0.1)}
+    .field-note{font-size:0.6rem;color:var(--dim);margin-top:4px;line-height:1.5}
+    .field-note span{color:var(--orange)}
+
+    /* Snapped info */
+    #snapped-info{
+      display:none;background:rgba(255,159,67,0.05);
+      border:1px solid rgba(255,159,67,0.2);border-radius:8px;padding:10px 12px;margin-bottom:1rem;
+    }
+    #snapped-info.visible{display:block}
+    .snapped-lbl{font-family:'Space Mono',monospace;font-size:0.56rem;letter-spacing:0.1em;color:var(--orange);margin-bottom:4px}
+    #snapped-time{font-family:'Space Mono',monospace;font-size:0.8rem;color:var(--text)}
+    .snapped-note{font-size:0.6rem;color:var(--dim);margin-top:3px}
+
+    /* Load button */
+    #submit-btn{
+      width:100%;margin-top:0.3rem;padding:12px;border-radius:10px;
+      border:1px solid rgba(0,212,255,0.35);background:rgba(0,212,255,0.1);color:var(--cyan);
+      font-family:'Orbitron',sans-serif;font-size:0.73rem;font-weight:700;letter-spacing:0.08em;
+      cursor:pointer;transition:background .2s,box-shadow .2s,transform .14s;
+    }
+    #submit-btn:hover:not(:disabled){background:rgba(0,212,255,0.18);box-shadow:var(--glow);transform:translateY(-1px)}
+    #submit-btn:disabled{opacity:0.35;cursor:not-allowed;transform:none}
+
+    .divider{height:1px;background:rgba(0,212,255,0.08);margin:1.2rem 0 0}
+
+    /* Status area */
+    #status-area{padding:1.2rem;display:none;flex-direction:column;gap:0.7rem}
+    #status-area.visible{display:flex}
+    .status-card{background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:10px;padding:12px}
+    .status-hdr{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .mini-spinner{
+      width:17px;height:17px;border:2px solid rgba(0,212,255,0.14);
+      border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;
+    }
+    .status-icon{font-size:1rem;flex-shrink:0}
+    .status-lbl{font-family:'Space Mono',monospace;font-size:0.66rem;color:var(--cyan)}
+    .status-msg{font-size:0.7rem;color:var(--text);line-height:1.5}
+    .prog-wrap{display:none;margin-top:6px}
+    .prog-wrap.visible{display:block}
+    .prog-bg{height:4px;border-radius:2px;background:rgba(0,212,255,0.1);overflow:hidden}
+    .prog-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,#0057d9,#00d4ff);transition:width .4s;width:0%}
+    .prog-txt{margin-top:3px;text-align:right;font-family:'Space Mono',monospace;font-size:0.56rem;color:var(--dim)}
+
+    /* Frames panel */
+    #frames-area{padding:0 1.3rem 1.3rem;display:none;flex-direction:column;gap:0.8rem}
+    #frames-area.visible{display:flex}
+
+    /* Batch navigation */
+    .batch-nav{display:flex;align-items:center;justify-content:space-between;padding:0.8rem 0 0.4rem}
+    .batch-title{font-family:'Space Mono',monospace;font-size:0.57rem;letter-spacing:0.12em;color:var(--dim)}
+    .batch-btns{display:flex;align-items:center;gap:6px}
+    .batch-btn{
+      display:flex;align-items:center;gap:4px;
+      padding:5px 10px;border-radius:7px;
+      border:1px solid rgba(0,212,255,0.22);background:rgba(0,212,255,0.06);
+      color:var(--cyan);font-family:'Space Mono',monospace;font-size:0.62rem;
+      cursor:pointer;transition:background .18s,box-shadow .15s,opacity .15s;user-select:none;
+    }
+    .batch-btn:hover:not(:disabled){background:rgba(0,212,255,0.16);box-shadow:var(--glow)}
+    .batch-btn:disabled{opacity:0.25;cursor:not-allowed}
+
+    /* Batch date range strip */
+    .batch-range{
+      background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.1);
+      border-radius:8px;padding:8px 12px;text-align:center;
+    }
+    .batch-range-txt{font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--text)}
+    .batch-range-sub{font-size:0.58rem;color:var(--dim);margin-top:2px}
+
+    /* 4x2 image grid */
+    .frame-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+    .rframe{
+      border-radius:7px;overflow:hidden;border:1px solid rgba(0,212,255,0.1);
+      background:rgba(0,0,0,0.3);cursor:pointer;position:relative;
+      transition:border-color .2s,box-shadow .15s;
+    }
+    .rframe:hover{border-color:rgba(0,212,255,0.3)}
+    .rframe.active{border-color:var(--cyan);box-shadow:0 0 12px rgba(0,212,255,0.25)}
+    .rframe img{width:100%;aspect-ratio:1;object-fit:cover;display:block;filter:brightness(1.1) contrast(1.05)}
+    .rframe-label{
+      position:absolute;bottom:3px;left:3px;
+      font-family:'Space Mono',monospace;font-size:0.44rem;
+      background:rgba(3,8,16,0.88);color:var(--cyan);border-radius:3px;padding:2px 5px;
+    }
+    .rframe-num{
+      position:absolute;top:3px;right:3px;
+      font-family:'Space Mono',monospace;font-size:0.46rem;
+      background:rgba(0,212,255,0.15);color:var(--cyan);border-radius:3px;padding:2px 5px;
+    }
+
+    /* Active frame detail */
+    .frame-detail{
+      background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.1);
+      border-radius:8px;padding:10px 12px;display:none;flex-direction:column;gap:3px;
+    }
+    .frame-detail.visible{display:flex}
+    .fd-label{font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--cyan)}
+    .fd-sub{font-size:0.62rem;color:var(--dim)}
+
+    /* Frame navigation (prev/next within the 8) */
+    .frame-nav{display:flex;align-items:center;justify-content:space-between}
+    .frame-nav-title{font-family:'Space Mono',monospace;font-size:0.57rem;letter-spacing:0.1em;color:var(--dim)}
+    .fnav-btns{display:flex;align-items:center;gap:6px}
+    .fnav-btn{
+      width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+      border-radius:7px;border:1px solid rgba(0,212,255,0.22);background:rgba(0,212,255,0.06);
+      color:var(--cyan);font-size:0.72rem;cursor:pointer;
+      transition:background .18s,box-shadow .15s,opacity .15s;user-select:none;
+    }
+    .fnav-btn:hover:not(:disabled){background:rgba(0,212,255,0.16);box-shadow:var(--glow)}
+    .fnav-btn:disabled{opacity:0.22;cursor:not-allowed}
+    .fnav-counter{font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--dim)}
+
+    /* Error toast */
+    #error-toast{
+      position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:1100;
+      background:rgba(255,60,60,0.1);border:1px solid rgba(255,60,60,0.3);
+      border-radius:8px;padding:10px 18px;
+      font-family:'Space Mono',monospace;font-size:0.64rem;color:#ff8080;
+      display:none;max-width:400px;text-align:center;
+    }
+
+    @media(max-width:768px){
+      :root{--sidebar:0px}
+      #map{right:0;bottom:320px}
+      #map-loading{right:0;bottom:320px}
+      #sidebar{width:100%;top:auto;bottom:0;height:320px;border-left:none;border-top:1px solid rgba(0,212,255,0.12)}
+      #legend{display:none}
+    }
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header id="topbar">
+  <a href="index.html" class="home-btn">← HOME</a>
+  <div class="topbar-title">CLOUD MOTION TRACKER</div>
+  <div class="mode-badge">DATA BROWSER</div>
+</header>
+
+<!-- MAP -->
+<div id="map"></div>
+<div id="map-loading">
+  <div class="big-spinner"></div>
+  <div class="loading-txt" id="loading-txt">Downloading satellite data…</div>
+</div>
+
+<!-- LEGEND -->
+<div id="legend">
+  <div class="legend-title">CLOUD OVERLAY</div>
+  <div class="legend-item"><div class="legend-swatch sw-cloud"></div><div class="legend-text">Cloud</div></div>
+  <div class="legend-item"><div class="legend-swatch sw-clear"></div><div class="legend-text">Clear</div></div>
+</div>
+
+<div id="error-toast"></div>
+
+<!-- SIDEBAR -->
+<aside id="sidebar">
+
+  <div class="s-block">
+    <div class="s-title">SELECT START DATE &amp; TIME (UTC)</div>
+
+    <div class="field">
+      <label>DATE</label>
+      <input type="date" id="date-input"/>
+    </div>
+    <div class="field">
+      <label>TIME (UTC)</label>
+      <input type="time" id="time-input"/>
+      <div class="field-note">Snaps to nearest <span>HH:15</span> or <span>HH:45</span> UTC slot.<br>8 consecutive real frames loaded from that point.</div>
+    </div>
+
+    <div id="snapped-info">
+      <div class="snapped-lbl">BATCH STARTS AT</div>
+      <div id="snapped-time">—</div>
+      <div class="snapped-note">8 frames × 30 min = 4 hours of real observations.</div>
+    </div>
+
+    <button id="submit-btn">LOAD DATA ▶</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Status -->
+  <div id="status-area">
+    <div class="s-title" style="padding:0">STATUS</div>
+    <div class="status-card">
+      <div class="status-hdr">
+        <div class="mini-spinner" id="status-spinner"></div>
+        <div class="status-icon"  id="status-icon" style="display:none">✓</div>
+        <div class="status-lbl"   id="status-label">Initialising…</div>
+      </div>
+      <div class="status-msg"     id="status-message"></div>
+      <div class="prog-wrap"      id="prog-wrap">
+        <div class="prog-bg"><div class="prog-fill" id="prog-fill"></div></div>
+        <div class="prog-txt" id="prog-txt">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Frames -->
+  <div id="frames-area">
+
+    <!-- Batch navigation (jump ±8 frames / 4 h) -->
+    <div class="batch-nav">
+      <div class="batch-title">OBSERVATION BATCH</div>
+      <div class="batch-btns">
+        <button class="batch-btn" id="prev-batch" disabled>◀ PREV 4H</button>
+        <button class="batch-btn" id="next-batch" disabled>NEXT 4H ▶</button>
+      </div>
+    </div>
+
+    <!-- Batch date range -->
+    <div class="batch-range">
+      <div class="batch-range-txt" id="batch-range-txt">—</div>
+      <div class="batch-range-sub">8 real INSAT-3DR observations · no model inference</div>
+    </div>
+
+    <!-- Frame picker (prev/next within the 8) -->
+    <div class="frame-nav">
+      <div class="frame-nav-title">CURRENT FRAME</div>
+      <div class="fnav-btns">
+        <button class="fnav-btn" id="prev-frame" disabled>◀</button>
+        <span   class="fnav-counter" id="frame-counter">1 / 8</span>
+        <button class="fnav-btn" id="next-frame" disabled>▶</button>
+      </div>
+    </div>
+
+    <!-- Active frame detail -->
+    <div class="frame-detail" id="frame-detail">
+      <div class="fd-label" id="fd-label">—</div>
+      <div class="fd-sub">Real INSAT-3DR observation</div>
+    </div>
+
+    <!-- 4×2 thumbnail grid -->
+    <div class="frame-grid" id="frame-grid"></div>
+
+  </div>
+</aside>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ====================================================================
+   Cloud Motion Tracker — Manual Data Browser
+   • NO model inference
+   • 8 real INSAT-3DR frames per batch
+   • Batch navigation: PREV 4H / NEXT 4H (shifts window by 4 hours)
+   • Frame navigation: PREV / NEXT within the current 8 frames
+   • Map locked to India — cannot pan or zoom outside the region
+   ==================================================================== */
+
+const HIST_URL   = '/api/historical';
+const STATUS_URL = '/api/historical/status';
+const POLL_MS    = 8_000;
+
+const INDIA_CENTER = [20.5937, 78.9629];
+const INDIA_ZOOM   = 5;
+const INDIA_BOUNDS = [[5.0, 65.0], [35.0, 100.0]];
+
+/* ── Map init — locked to India ──────────────────────────────────── */
+const map = L.map('map', {
+  center:             INDIA_CENTER,
+  zoom:               INDIA_ZOOM,
+  minZoom:            5,          // cannot zoom out past India view
+  maxZoom:            10,
+  maxBounds:          [[2.0, 60.0], [40.0, 105.0]],
+  maxBoundsViscosity: 1.0,        // hard wall
+  attributionControl: false,
+});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  {maxZoom:10, subdomains:'abcd'}).addTo(map);
+
+// ── State ─────────────────────────────────────────────────────────
+let batchFrames   = [];     // current 8 frames
+let activeFrame   = 0;
+let currentStartIso = null; // ISO of batch start slot (for prev/next 4h)
+let pollTimer     = null;
+let currentJobId  = null;
+let imageOverlay  = null;
+
+// ── DOM ───────────────────────────────────────────────────────────
+const $          = id => document.getElementById(id);
+const dateInput  = $('date-input');
+const timeInput  = $('time-input');
+const submitBtn  = $('submit-btn');
+const statusArea = $('status-area');
+const statusSpinner=$('status-spinner');
+const statusIcon = $('status-icon');
+const statusLabel= $('status-label');
+const statusMsg  = $('status-message');
+const progWrap   = $('prog-wrap');
+const progFill   = $('prog-fill');
+const progTxt    = $('prog-txt');
+const framesArea = $('frames-area');
+const frameGrid  = $('frame-grid');
+const frameCounter=$('frame-counter');
+const prevFrame  = $('prev-frame');
+const nextFrame  = $('next-frame');
+const frameDetail= $('frame-detail');
+const fdLabel    = $('fd-label');
+const prevBatch  = $('prev-batch');
+const nextBatch  = $('next-batch');
+const batchRange = $('batch-range-txt');
+const mapLoading = $('map-loading');
+const loadingTxt = $('loading-txt');
+const snappedInfo= $('snapped-info');
+const snappedTime= $('snapped-time');
+const errorToast = $('error-toast');
+
+/* ── Defaults: today UTC ─────────────────────────────────────────── */
+(function(){
+  const now = new Date();
+  dateInput.value = now.toISOString().slice(0,10);
+  timeInput.value = now.toISOString().slice(11,16);
+  dateInput.max   = now.toISOString().slice(0,10);
+})();
+
+/* ── Snap preview ────────────────────────────────────────────────── */
+function snapPreview(dt){
+  const h = new Date(Math.floor(+dt/3600000)*3600000);
+  const cands = [
+    new Date(+h - 15*60000), new Date(+h+15*60000),
+    new Date(+h+45*60000),   new Date(+h+75*60000),
+  ];
+  return cands.reduce((b,c)=>Math.abs(c-dt)<Math.abs(b-dt)?c:b);
+}
+function fmtUTC(d){return d.toISOString().replace('T',' ').slice(0,16)+' UTC'}
+function updateSnap(){
+  if(!dateInput.value||!timeInput.value){snappedInfo.classList.remove('visible');return}
+  const dt=new Date(`${dateInput.value}T${timeInput.value}:00Z`);
+  if(isNaN(dt)){snappedInfo.classList.remove('visible');return}
+  snappedTime.textContent=fmtUTC(snapPreview(dt));
+  snappedInfo.classList.add('visible');
+}
+dateInput.addEventListener('change',updateSnap);
+timeInput.addEventListener('change',updateSnap);
+updateSnap();
+
+/* ── Overlay ────────────────────────────────────────────────────── */
+function showOverlay(url){
+  if(imageOverlay) imageOverlay.setUrl(url);
+  else imageOverlay=L.imageOverlay(url,INDIA_BOUNDS,{opacity:0.75}).addTo(map);
+}
+function clearOverlay(){
+  if(imageOverlay){map.removeLayer(imageOverlay);imageOverlay=null;}
+}
+
+/* ── Error toast ─────────────────────────────────────────────────── */
+function showError(msg){
+  errorToast.textContent=`⚠ ${msg}`;
+  errorToast.style.display='block';
+  setTimeout(()=>{errorToast.style.display='none';},8000);
+}
+
+/* ── Status card ──────────────────────────────────────────────────── */
+function setStatus(label,msg='',spinning=true,progress=null){
+  statusArea.classList.add('visible');
+  statusLabel.textContent=label;
+  statusMsg.textContent=msg;
+  statusSpinner.style.display=spinning?'block':'none';
+  statusIcon.style.display   =spinning?'none':'block';
+  if(progress!==null){
+    progWrap.classList.add('visible');
+    progFill.style.width=`${Math.max(0,Math.min(100,progress))}%`;
+    progTxt.textContent=`${Math.round(progress)}%`;
+  } else {
+    progWrap.classList.remove('visible');
+  }
+}
+function setMapLoading(on,txt='Downloading satellite data…'){
+  loadingTxt.textContent=txt;
+  mapLoading.classList.toggle('visible',on);
+}
+
+/* ── Frame navigation ─────────────────────────────────────────────── */
+function syncFrameNav(){
+  prevFrame.disabled=(activeFrame===0);
+  nextFrame.disabled=(activeFrame>=batchFrames.length-1);
+}
+
+function selectFrame(idx){
+  idx=Math.max(0,Math.min(idx,batchFrames.length-1));
+  activeFrame=idx;
+  const f=batchFrames[idx];
+  showOverlay(f.url);
+  fdLabel.textContent=f.label||'—';
+  frameDetail.classList.add('visible');
+  frameCounter.textContent=`${idx+1} / ${batchFrames.length}`;
+  document.querySelectorAll('.rframe').forEach((el,i)=>el.classList.toggle('active',i===idx));
+  syncFrameNav();
+}
+
+prevFrame.addEventListener('click',()=>{if(activeFrame>0)selectFrame(activeFrame-1)});
+nextFrame.addEventListener('click',()=>{if(activeFrame<batchFrames.length-1)selectFrame(activeFrame+1)});
+
+/* ── Build grid ───────────────────────────────────────────────────── */
+function buildGrid(){
+  frameGrid.innerHTML='';
+  batchFrames.forEach((f,i)=>{
+    const div=document.createElement('div');
+    div.className=`rframe${i===activeFrame?' active':''}`;
+    div.innerHTML=`
+      <img src="${f.url}" alt="${f.label||''}" loading="lazy"/>
+      <div class="rframe-label">${f.label||'—'}</div>
+      <div class="rframe-num">${i+1}</div>
+    `;
+    div.addEventListener('click',()=>selectFrame(i));
+    frameGrid.appendChild(div);
+  });
+}
+
+/* ── Handle ready response ────────────────────────────────────────── */
+function handleReady(data){
+  stopPolling();
+  setMapLoading(false);
+
+  if(!data.frames||!data.frames.length){
+    setStatus('No frames returned','Backend returned an empty frame list.',false);
+    showError('No frames returned.');
+    submitBtn.disabled=false;
+    return;
+  }
+
+  batchFrames=data.frames;
+  activeFrame=0;
+  currentStartIso=data.startIso||null;
+
+  setStatus('Data loaded',`${batchFrames.length} real observations`,false,100);
+
+  // Batch range display
+  batchRange.textContent=
+    data.startSlot && data.endSlot
+      ? `${data.startSlot}  →  ${data.endSlot}`
+      : `${batchFrames.length} frames loaded`;
+
+  // Enable batch navigation
+  prevBatch.disabled=false;
+  nextBatch.disabled=false;
+
+  // Enable frame nav
+  prevFrame.disabled=true;
+  nextFrame.disabled=(batchFrames.length<=1);
+
+  framesArea.classList.add('visible');
+  buildGrid();
+  selectFrame(0);
+  submitBtn.disabled=false;
+
+  if(data.startSlot){
+    snappedTime.textContent=data.startSlot;
+    snappedInfo.classList.add('visible');
+  }
+}
+
+/* ── Poll ─────────────────────────────────────────────────────────── */
+function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+
+async function pollStatus(){
+  try{
+    const res=await fetch(`${STATUS_URL}?jobId=${encodeURIComponent(currentJobId)}`);
+    const data=await res.json();
+    if(data.status==='ready'){
+      handleReady(data);
+    } else if(data.status==='error'){
+      stopPolling();
+      setStatus('Error',data.message||'Download failed.',false);
+      setMapLoading(false);
+      showError(data.message||'Error.');
+      submitBtn.disabled=false;
+    } else {
+      setStatus('Downloading…',data.message||'',true,data.progress||null);
+      loadingTxt.textContent=data.message||'Downloading satellite data…';
+    }
+  } catch(e){console.error('[manual] poll:',e)}
+}
+
+/* ── Core fetch function ──────────────────────────────────────────── */
+async function fetchBatch(isoStr){
+  stopPolling();
+  clearOverlay();
+  batchFrames=[];
+  framesArea.classList.remove('visible');
+  frameDetail.classList.remove('visible');
+  frameGrid.innerHTML='';
+  submitBtn.disabled=true;
+  setMapLoading(true,'Searching MOSDAC…');
+  setStatus('Searching for data…','Contacting MOSDAC · INSAT-3DR',true);
+
+  try{
+    const res=await fetch(`${HIST_URL}?datetime=${encodeURIComponent(isoStr)}`);
+    if(!res.ok){
+      const err=await res.json().catch(()=>({}));
+      throw new Error(err.detail||`HTTP ${res.status}`);
+    }
+    const data=await res.json();
+
+    if(data.startSlot){
+      snappedTime.textContent=data.startSlot;
+      snappedInfo.classList.add('visible');
+    }
+    if(data.startIso) currentStartIso=data.startIso;
+
+    if(data.status==='ready'){
+      handleReady(data);
+    } else if(data.status==='processing'){
+      currentJobId=data.jobId;
+      setStatus('Downloading…',data.message||'',true,data.progress||0);
+      pollTimer=setInterval(pollStatus,POLL_MS);
+    } else if(data.status==='error'){
+      throw new Error(data.message||'Backend error.');
+    }
+  } catch(e){
+    console.error('[manual]',e);
+    setStatus('Failed',e.message,false);
+    setMapLoading(false);
+    showError(e.message);
+    submitBtn.disabled=false;
+  }
+}
+
+/* ── Submit ───────────────────────────────────────────────────────── */
+submitBtn.addEventListener('click',()=>{
+  if(!dateInput.value||!timeInput.value){showError('Please select a date and time.');return;}
+  const dt=new Date(`${dateInput.value}T${timeInput.value}:00Z`);
+  if(isNaN(dt)){showError('Invalid date or time.');return;}
+  if(dt>new Date()){showError('Cannot browse future dates.');return;}
+  fetchBatch(dt.toISOString());
+});
+
+/* ── Batch navigation: ±4 hours ──────────────────────────────────── */
+function shiftBatch(hours){
+  if(!currentStartIso) return;
+  const dt=new Date(new Date(currentStartIso).getTime() + hours*3600000);
+  if(hours>0 && dt>new Date()){showError('Cannot browse future dates.');return;}
+  // Update the input fields to reflect the new batch start
+  dateInput.value=dt.toISOString().slice(0,10);
+  timeInput.value=dt.toISOString().slice(11,16);
+  updateSnap();
+  fetchBatch(dt.toISOString());
+}
+prevBatch.addEventListener('click',()=>shiftBatch(-4));
+nextBatch.addEventListener('click',()=>shiftBatch(+4));
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+cmenv/
+venv/
+.venv/
+env/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+*.log
+*.db
+
+# data
+data/
+*.h5
+*.h5.part
+
+# models
+*.keras
+
+# archives
+archive/
+
+# chroma database
+rag/Chroma dir/
+config.json

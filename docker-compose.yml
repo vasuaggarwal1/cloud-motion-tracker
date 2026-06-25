@@ -1,0 +1,28 @@
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama-server
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama   # model lives HERE, not in image
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3.2 && wait"]
+
+  backend:
+    build: .
+    container_name: cloud-backend
+    ports:
+      - "7860:7860"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2
+    depends_on:
+      - ollama
+    volumes:
+      - ./models:/app/models        # mount ONNX model, don't bake it in
+      - ./rag/Chroma dir:/app/rag/Chroma dir  # mount chroma DB
+      - fastembed_cache:/root/.cache/fastembed   # ← add this
+
+volumes:
+  ollama_data:
+  fastembed_cache:   
