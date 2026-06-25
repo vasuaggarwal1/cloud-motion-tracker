@@ -25,3 +25,4 @@ archive/
 # chroma database
 rag/Chroma dir/
 config.json
+.ipynb_checkpoints/
